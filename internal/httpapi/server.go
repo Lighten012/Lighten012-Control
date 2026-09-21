@@ -8,14 +8,9 @@ import (
 	"github.com/lighten012/control/internal/modules"
 )
 
-// Server HTTP 服务：组装各模块路由与静态页托管。
-type Server struct {
-	handler http.Handler
-}
-
-// New 创建服务并完成路由组装：依次挂载各模块的 API 路由，
-// 未匹配的 /lighten012-api/* 路径统一返回 JSON 404，其余路径由静态页托管。
-func New(reg *modules.Registry, static http.FileSystem) *Server {
+// New 组装根 HTTP 处理器：依次挂载各模块的 API 路由，
+// 未匹配的 API 路径统一返回 JSON 404，其余路径由静态页托管。
+func New(reg *modules.Registry, static http.FileSystem) http.Handler {
 	mux := http.NewServeMux()
 
 	for _, m := range reg.Modules() {
@@ -23,7 +18,7 @@ func New(reg *modules.Registry, static http.FileSystem) *Server {
 		log.Printf("[server] 已注册模块: %s", m.Name())
 	}
 
-	mux.HandleFunc("/lighten012-api/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(modules.PathPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "接口不存在")
 	})
 
@@ -31,11 +26,8 @@ func New(reg *modules.Registry, static http.FileSystem) *Server {
 		mux.Handle("/", http.FileServer(static))
 	}
 
-	return &Server{handler: withLogging(mux)}
+	return withLogging(mux)
 }
-
-// Handler 返回根 HTTP 处理器。
-func (s *Server) Handler() http.Handler { return s.handler }
 
 // statusWriter 记录响应状态码，用于访问日志。
 type statusWriter struct {

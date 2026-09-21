@@ -87,7 +87,7 @@ make build && ./bin/lighten012-control -addr :8080
 ## 新增模块指引（如 iptables）
 
 1. 新建 `internal/modules/iptables/`，实现业务 `Service`：通过
-   `runner.RunChecked(ctx, "iptables", args...)` 执行命令（命令与参数在服务端
+   `runner.Run(ctx, "iptables", args...)` 执行命令（命令与参数在服务端
    硬编码），解析输出并定义 DTO；
 2. 实现 `modules.Module` 接口：`Name()` 返回模块名；`RegisterRoutes()` 注册
    自己的 `GET/POST /lighten012-api/...` 路由（根路径用共享常量 `modules.PathPrefix`）；

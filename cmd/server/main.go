@@ -28,10 +28,9 @@ func main() {
 	registry := modules.NewRegistry()
 	registry.Register(podman.NewModule(executor))
 
-	api := httpapi.New(registry, web.HTTP())
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           api.Handler(),
+		Handler:           httpapi.New(registry, web.HTTP()),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

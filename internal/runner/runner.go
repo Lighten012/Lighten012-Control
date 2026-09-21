@@ -17,31 +17,31 @@ import (
 // DefaultTimeout 默认命令执行超时。
 const DefaultTimeout = 10 * time.Second
 
-// Result 一次命令执行的完整结果。
+// Result 一次命令执行的输出与退出码。
 type Result struct {
 	Stdout   string
 	Stderr   string
 	ExitCode int
 }
 
-// Runner 外部命令执行器，可被多个模块并发使用。
-type Runner struct {
+// Executor 外部命令执行器，可被多个模块并发使用。
+type Executor struct {
 	timeout time.Duration
 }
 
 // New 创建执行器；timeout <= 0 时使用 DefaultTimeout。
-func New(timeout time.Duration) *Runner {
+func New(timeout time.Duration) *Executor {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Runner{timeout: timeout}
+	return &Executor{timeout: timeout}
 }
 
 // Run 执行命令并返回结果。
 // 命令无法启动、超时或非零退出码均返回 error（非零退出时错误信息附带 stderr）；
 // 此时 Result 仍然返回，供调用方检查已产生的输出。
-func (r *Runner) Run(ctx context.Context, name string, args ...string) (Result, error) {
-	ctx, cancel := context.WithTimeout(ctx, r.timeout)
+func (e *Executor) Run(ctx context.Context, name string, args ...string) (Result, error) {
+	ctx, cancel := context.WithTimeout(ctx, e.timeout)
 	defer cancel()
 
 	var stdout, stderr bytes.Buffer

@@ -7,33 +7,33 @@ package modules
 
 import "net/http"
 
+// PathPrefix 所有模块 API 路由的统一根路径。
+const PathPrefix = "/lighten012-api"
+
 // Module 一个可被后端托管的 Linux 功能模块。
 type Module interface {
 	// Name 模块唯一名称，用于日志与路由归属标识，例如 "podman"。
 	Name() string
 	// RegisterRoutes 将模块的 API 路由注册到 mux。
-	// 路径约定（口头约定，双方确认即可）：统一为 /lighten012-api/<操控组件>/...，
-	// 具体子路径由各模块以字面量自行定义。
+	// 路径约定：统一为 PathPrefix/<模块名>/...，具体子路径由各模块自行定义。
 	RegisterRoutes(mux *http.ServeMux)
 }
 
 // Registry 模块注册表。
 type Registry struct {
 	modules []Module
-	byName  map[string]Module
 }
 
 // NewRegistry 创建空的模块注册表。
-func NewRegistry() *Registry {
-	return &Registry{byName: make(map[string]Module)}
-}
+func NewRegistry() *Registry { return &Registry{} }
 
 // Register 注册模块；名称重复视为程序缺陷，启动期立即 panic 暴露。
 func (rg *Registry) Register(m Module) {
-	if _, dup := rg.byName[m.Name()]; dup {
-		panic("modules: 重复注册模块 " + m.Name())
+	for _, existing := range rg.modules {
+		if existing.Name() == m.Name() {
+			panic("modules: 重复注册模块 " + m.Name())
+		}
 	}
-	rg.byName[m.Name()] = m
 	rg.modules = append(rg.modules, m)
 }
 
