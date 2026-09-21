@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lighten012 Control</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-header">
+      <div class="page-title">
+        <h1>Lighten012 Control</h1>
+        <p class="subtitle">Podman 组件 · 只读查询</p>
+      </div>
+      <button id="refresh-btn" class="btn" type="button" title="重新拉取当前页签数据">
+        <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+          <polyline points="21 3 21 9 15 9"/>
+        </svg>
+        <span>刷新</span>
+      </button>
+    </header>
+
+    <nav class="tabs" id="tabs" aria-label="资源页签"></nav>
+
+    <section class="card">
+      <div class="toolbar">
+        <span id="total" class="total"></span>
+        <label class="auto-refresh">
+          <input type="checkbox" id="auto-refresh" checked>
+          <span>每 5 秒自动刷新</span>
+        </label>
+      </div>
+
+      <div id="status" class="status" hidden></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead id="thead"></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var thead = document.getElementById('thead');
+      var tbody = document.getElementById('tbody');
+      var statusEl = document.getElementById('status');
+      var totalEl = document.getElementById('total');
+      var refreshBtn = document.getElementById('refresh-btn');
+      var autoChk = document.getElementById('auto-refresh');
+      var tabsEl = document.getElementById('tabs');
+
+      // ---------- 工具渲染 ----------
+
+      // 字节数人性化（1024 进制）
+      function humanBytes(n) {
+        if (typeof n !== 'number' || isNaN(n) || n < 0) return '-';
+        var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+        var v = n, i = 0;
+        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+        return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i];
+      }
+
+      function fmtBool(v) {
+        if (v === true) return '是';
+        if (v === false) return '否';
+        return '-';
+      }
+
+      function fmtList(arr) {
+        return Array.isArray(arr) && arr.length ? arr.join('、') : '-';
+      }
+
+      // 容器状态圆点（渲染函数：往单元格追加 dot + 文本）
+      var STATE_META = {
+        running:    { label: '运行中', cls: 'st-running' },
+        paused:     { label: '已暂停', cls: 'st-paused' },
+        restarting: { label: '重启中', cls: 'st-paused' },
+        exited:     { label: '已退出', cls: 'st-stopped' },
+        created:    { label: '已创建', cls: 'st-stopped' },
+        dead:       { label: '已终止', cls: 'st-stopped' }
+      };
+
+      function renderState(td, value) {
+        var meta = STATE_META[value] || { label: value || '未知', cls: 'st-stopped' };
+        var dot = document.createElement('span');
+        dot.className = 'dot ' + meta.cls;
+        var label = document.createElement('span');
+        label.className = 'state-label';
+        label.textContent = meta.label;
+        td.appendChild(dot);
+        td.appendChild(label);
+      }
+
+      // ---------- 页签配置（列与后端 DTO 字段一致） ----------
+
+      var TABS = [
+        {
+          label: '容器',
+          api: '/lighten012-api/podman/containers',
+          total: function (n) { return '共 ' + n + ' 个容器'; },
+          columns: [
+            { key: 'name', label: '名称', cls: 'cell-name' },
+            { key: 'image', label: '镜像', cls: 'cell-image' },
+            { key: 'state', label: '状态', render: renderState },
+            { key: 'status', label: '运行信息', cls: 'cell-muted' },
+            { key: 'created', label: '创建时间', cls: 'cell-muted' }
+          ]
+        },
+        {
+          label: '镜像',
+          api: '/lighten012-api/podman/images',
+          total: function (n) { return '共 ' + n + ' 个镜像'; },
+          columns: [
+            { key: 'id', label: 'ID', cls: 'cell-muted' },
+            { key: 'name', label: '名称', cls: 'cell-name' },
+            { key: 'size', label: '大小', render: humanBytes },
+            { key: 'containers', label: '引用容器数' },
+            { key: 'created', label: '创建时间', cls: 'cell-muted' }
+          ]
+        },
+        {
+          label: '网络',
+          api: '/lighten012-api/podman/networks',
+          total: function (n) { return '共 ' + n + ' 个网络'; },
+          columns: [
+            { key: 'name', label: '名称', cls: 'cell-name' },
+            { key: 'driver', label: '驱动', cls: 'cell-muted' },
+            { key: 'interface', label: '网卡', cls: 'cell-muted' },
+            { key: 'subnets', label: '子网', render: fmtList },
+            { key: 'dnsEnabled', label: 'DNS', render: fmtBool },
+            { key: 'created', label: '创建时间', cls: 'cell-muted' }
+          ]
+        },
+        {
+          label: '存储卷',
+          api: '/lighten012-api/podman/volumes',
+          total: function (n) { return '共 ' + n + ' 个存储卷'; },
+          columns: [
+            { key: 'name', label: '名称', cls: 'cell-name' },
+            { key: 'driver', label: '驱动', cls: 'cell-muted' },
+            { key: 'scope', label: '作用域', cls: 'cell-muted' },
+            { key: 'mountpoint', label: '挂载点', cls: 'cell-wrap cell-muted' },
+            { key: 'created', label: '创建时间', cls: 'cell-muted' }
+          ]
+        },
+        {
+          label: '信息',
+          api: '/lighten012-api/podman/info',
+          total: function () { return '运行环境信息'; },
+          // info 为对象，展平为键值两列复用同一表格渲染
+          flatten: function (data) {
+            return [
+              { label: 'Podman 版本', value: data.version },
+              { label: '存储驱动', value: data.storageDriver },
+              { label: '操作系统', value: data.os },
+              { label: '架构', value: data.arch },
+              { label: '内核', value: data.kernel },
+              { label: 'CPU', value: data.cpus + ' 核' },
+              { label: '内存', value: humanBytes(data.memTotal) },
+              { label: '发行版', value: (data.distro || '-') + ' ' + (data.distroVersion || '') },
+              { label: 'Rootless', value: fmtBool(data.rootless) }
+            ];
+          },
+          columns: [
+            { key: 'label', label: '项目', cls: 'cell-name' },
+            { key: 'value', label: '值' }
+          ]
+        }
+      ];
+
+      var current = 0;
+
+      // ---------- 渲染 ----------
+
+      function setStatus(kind, text) {
+        statusEl.hidden = false;
+        statusEl.className = 'status ' + kind;
+        statusEl.textContent = text;
+      }
+
+      function clearStatus() {
+        statusEl.hidden = true;
+        statusEl.textContent = '';
+      }
+
+      // 全部使用 textContent 构建 DOM，避免任何注入风险
+      function renderList(list) {
+        var tab = TABS[current];
+
+        thead.textContent = '';
+        var trh = document.createElement('tr');
+        tab.columns.forEach(function (col) {
+          var th = document.createElement('th');
+          th.textContent = col.label;
+          trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+
+        tbody.textContent = '';
+        list.forEach(function (row) {
+          var tr = document.createElement('tr');
+          tab.columns.forEach(function (col) {
+            var td = document.createElement('td');
+            if (col.render) {
+              col.render(td, row[col.key], row);
+            } else {
+              var v = row[col.key];
+              td.textContent = (v === undefined || v === null || v === '') ? '-' : String(v);
+              if (col.cls) td.className = col.cls;
+            }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+
+        totalEl.textContent = tab.total(list.length);
+      }
+
+      async function load() {
+        var tab = TABS[current];
+        setStatus('loading', '加载中…');
+        refreshBtn.classList.add('spinning');
+        try {
+          var res = await fetch(tab.api);
+          var body = await res.json();
+          if (!res.ok || body.code !== 0) {
+            throw new Error(body.message || ('HTTP ' + res.status));
+          }
+          var data = tab.flatten ? tab.flatten(body.data) : (body.data || []);
+          clearStatus();
+          renderList(data);
+          if (data.length === 0) {
+            setStatus('empty', '暂无数据');
+          }
+        } catch (err) {
+          setStatus('error', '请求失败：' + (err && err.message ? err.message : String(err)));
+        } finally {
+          refreshBtn.classList.remove('spinning');
+        }
+      }
+
+      // ---------- 页签切换与自动刷新 ----------
+
+      function switchTab(i) {
+        if (i === current) return;
+        current = i;
+        Array.prototype.forEach.call(tabsEl.children, function (el, idx) {
+          el.classList.toggle('active', idx === i);
+        });
+        load();
+      }
+
+      TABS.forEach(function (tab, i) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'tab' + (i === 0 ? ' active' : '');
+        btn.textContent = tab.label;
+        btn.addEventListener('click', function () { switchTab(i); });
+        tabsEl.appendChild(btn);
+      });
+
+      var timer = null;
+      function setAutoRefresh(on) {
+        if (timer) {
+          clearInterval(timer);
+          timer = null;
+        }
+        if (on) {
+          timer = setInterval(load, 5000);
+        }
+      }
+
+      refreshBtn.addEventListener('click', load);
+      autoChk.addEventListener('change', function () {
+        setAutoRefresh(autoChk.checked);
+      });
+
+      setAutoRefresh(autoChk.checked);
+      load();
+    })();
+  </script>
+</body>
+</html>
