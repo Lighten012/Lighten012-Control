@@ -25,8 +25,65 @@ body {
   line-height: 1.6;
 }
 
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* ---------- 左侧模块导航 ---------- */
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 28px 12px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+}
+
+.brand {
+  padding: 0 12px 18px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.module-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.module-btn {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+
+.module-btn:hover {
+  background: var(--bg);
+  color: var(--text-strong);
+}
+
+.module-btn.active {
+  background: rgba(37, 99, 235, .1);
+  color: var(--primary);
+  font-weight: 600;
+}
+
 .page {
   max-width: 960px;
+  flex: 1;
+  min-width: 0;
   margin: 0 auto;
   padding: 32px 24px 48px;
   animation: fade-in .3s ease-out;
@@ -245,4 +302,31 @@ tbody tr:hover { background: var(--bg); }
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, .35); }
   50%      { box-shadow: 0 0 0 4px rgba(22, 163, 74, .12); }
+}
+
+@media (max-width: 720px) {
+  .app { display: block; }
+
+  .sidebar {
+    width: auto;
+    height: auto;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand { padding: 0; }
+  .module-nav {
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+  }
+  .module-btn { white-space: nowrap; }
+  .page { padding: 20px 12px 36px; }
 }

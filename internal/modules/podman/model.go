@@ -3,87 +3,11 @@ package podman
 import (
 	"strings"
 	"time"
+
+	"github.com/containers/podman/v5/libpod/define"
+	bindingsTypes "github.com/containers/podman/v5/pkg/domain/entities/types"
+	netTypes "go.podman.io/common/libnetwork/types"
 )
-
-// ---------- 原始结构：podman --format json 的实测字段（未列出的自动忽略） ----------
-
-// podmanContainer podman ps -a --format json 条目。
-// podman 5.x 的 Created 为 Unix 时间戳数值（旧版可能为字符串），
-// CreatedAt 为人性化时间字符串，故 Created 用 any 兼容两种形态。
-type podmanContainer struct {
-	Id        string   `json:"Id"`
-	Names     []string `json:"Names"`
-	Image     string   `json:"Image"`
-	State     string   `json:"State"`
-	Status    string   `json:"Status"`
-	Created   any      `json:"Created"`
-	CreatedAt string   `json:"CreatedAt"`
-}
-
-// podmanImage podman images --format json 条目（实测：Id 为裸 ID，
-// RepoTags 可能为 null，名称优先取 Names[0]）。
-type podmanImage struct {
-	Id          string   `json:"Id"`
-	Names       []string `json:"Names"`
-	RepoTags    []string `json:"RepoTags"`
-	RepoDigests []string `json:"RepoDigests"`
-	Digest      string   `json:"Digest"`
-	Size        int64    `json:"Size"`
-	Containers  int      `json:"Containers"`
-	CreatedAt   string   `json:"CreatedAt"`
-}
-
-// podmanNetwork podman network ls --format json 条目（实测键全小写）。
-type podmanNetwork struct {
-	Name             string `json:"name"`
-	Id               string `json:"id"`
-	Driver           string `json:"driver"`
-	NetworkInterface string `json:"network_interface"`
-	Created          string `json:"created"`
-	Subnets          []struct {
-		Subnet  string `json:"subnet"`
-		Gateway string `json:"gateway"`
-	} `json:"subnets"`
-	IPV6Enabled bool `json:"ipv6_enabled"`
-	Internal    bool `json:"internal"`
-	DNSEnabled  bool `json:"dns_enabled"`
-}
-
-// podmanVolume podman volume ls --format json 条目。
-// 当前环境暂无卷，键名按 podman 惯例设计，验证阶段以实测校准。
-type podmanVolume struct {
-	Name       string `json:"Name"`
-	Driver     string `json:"Driver"`
-	Scope      string `json:"Scope"`
-	Mountpoint string `json:"Mountpoint"`
-	CreatedAt  string `json:"CreatedAt"`
-	Anonymous  bool   `json:"Anonymous"`
-}
-
-// podmanInfo podman info --format json 中所需子集（实测：host 段全小写键，
-// store.graphDriverName，version.Version）。
-type podmanInfo struct {
-	Host struct {
-		Arch         string `json:"arch"`
-		Os           string `json:"os"`
-		Kernel       string `json:"kernel"`
-		Cpus         int    `json:"cpus"`
-		MemTotal     int64  `json:"memTotal"`
-		Distribution struct {
-			Distribution string `json:"distribution"`
-			Version      string `json:"version"`
-		} `json:"distribution"`
-		Security struct {
-			Rootless bool `json:"rootless"`
-		} `json:"security"`
-	} `json:"host"`
-	Store struct {
-		GraphDriverName string `json:"graphDriverName"`
-	} `json:"store"`
-	Version struct {
-		Version string `json:"Version"`
-	} `json:"version"`
-}
 
 // ---------- DTO：对外暴露的稳定结构 ----------
 
@@ -155,21 +79,23 @@ func shortID(id string) string {
 	return id
 }
 
-// displayTime 计算容器创建时间展示值：优先 CreatedAt（人性化字符串），
-// 缺失时回退格式化 Created（Unix 时间戳或字符串）。
-func displayTime(created any, createdAt string) string {
+// displayTime 优先返回 API 提供的人性化时间，否则格式化时间戳。
+func displayTime(created time.Time, createdAt string) string {
 	if createdAt != "" {
 		return createdAt
 	}
-	switch v := created.(type) {
-	case float64:
-		if v > 0 {
-			return time.Unix(int64(v), 0).Format("2006-01-02 15:04:05")
-		}
-	case string:
-		return v
+	if !created.IsZero() {
+		return created.Local().Format("2006-01-02 15:04:05")
 	}
 	return ""
+}
+
+// formatUnix 将 Podman 返回的 Unix 时间戳格式化为稳定展示格式。
+func formatUnix(seconds int64) string {
+	if seconds == 0 {
+		return ""
+	}
+	return time.Unix(seconds, 0).UTC().Format(time.RFC3339)
 }
 
 // firstName 依次取候选数组的首个非空元素，全部为空时返回 "<none>"。
@@ -184,9 +110,9 @@ func firstName(candidates ...[]string) string {
 	return "<none>"
 }
 
-func mapContainer(raw podmanContainer) Container {
+func mapContainer(raw bindingsTypes.ListContainer) Container {
 	c := Container{
-		ID:      shortID(raw.Id),
+		ID:      shortID(raw.ID),
 		Image:   raw.Image,
 		State:   raw.State,
 		Status:  raw.Status,
@@ -198,57 +124,65 @@ func mapContainer(raw podmanContainer) Container {
 	return c
 }
 
-func mapImage(raw podmanImage) Image {
+func mapImage(raw *bindingsTypes.ImageSummary) Image {
 	return Image{
-		ID:         shortID(raw.Id),
+		ID:         shortID(raw.ID),
 		Name:       firstName(raw.Names, raw.RepoTags),
 		Size:       raw.Size,
 		Containers: raw.Containers,
-		Created:    raw.CreatedAt,
+		Created:    formatUnix(raw.Created),
 		Digest:     raw.Digest,
 	}
 }
 
-func mapNetwork(raw podmanNetwork) Network {
+func mapNetwork(raw netTypes.Network) Network {
 	subnets := make([]string, 0, len(raw.Subnets))
 	for _, s := range raw.Subnets {
-		subnets = append(subnets, s.Subnet)
+		subnets = append(subnets, s.Subnet.String())
 	}
 	return Network{
-		ID:          shortID(raw.Id),
+		ID:          shortID(raw.ID),
 		Name:        raw.Name,
 		Driver:      raw.Driver,
 		Interface:   raw.NetworkInterface,
-		Created:     raw.Created,
+		Created:     displayTime(raw.Created, ""),
 		Subnets:     subnets,
 		DNSEnabled:  raw.DNSEnabled,
 		Internal:    raw.Internal,
-		IPV6Enabled: raw.IPV6Enabled,
+		IPV6Enabled: raw.IPv6Enabled,
 	}
 }
 
-func mapVolume(raw podmanVolume) Volume {
+func mapVolume(raw *bindingsTypes.VolumeListReport) Volume {
 	return Volume{
 		Name:       raw.Name,
 		Driver:     raw.Driver,
 		Scope:      raw.Scope,
 		Mountpoint: raw.Mountpoint,
-		Created:    raw.CreatedAt,
+		Created:    displayTime(raw.CreatedAt, ""),
 		Anonymous:  raw.Anonymous,
 	}
 }
 
-func mapInfo(raw podmanInfo) Info {
-	return Info{
-		Version:       raw.Version.Version,
-		StorageDriver: raw.Store.GraphDriverName,
-		Os:            raw.Host.Os,
-		Arch:          raw.Host.Arch,
-		Kernel:        raw.Host.Kernel,
-		Cpus:          raw.Host.Cpus,
-		MemTotal:      raw.Host.MemTotal,
-		Rootless:      raw.Host.Security.Rootless,
-		Distro:        raw.Host.Distribution.Distribution,
-		DistroVersion: raw.Host.Distribution.Version,
+func mapInfo(raw *define.Info) Info {
+	if raw == nil {
+		return Info{}
 	}
+
+	info := Info{}
+	if raw.Host != nil {
+		info.Os = raw.Host.OS
+		info.Arch = raw.Host.Arch
+		info.Kernel = raw.Host.Kernel
+		info.Cpus = raw.Host.CPUs
+		info.MemTotal = raw.Host.MemTotal
+		info.Rootless = raw.Host.Security.Rootless
+		info.Distro = raw.Host.Distribution.Distribution
+		info.DistroVersion = raw.Host.Distribution.Version
+	}
+	if raw.Store != nil {
+		info.StorageDriver = raw.Store.GraphDriverName
+	}
+	info.Version = raw.Version.Version
+	return info
 }

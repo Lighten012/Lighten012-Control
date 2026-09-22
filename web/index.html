@@ -7,11 +7,17 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="page">
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">Lighten012 Control</div>
+      <nav class="module-nav" id="module-nav" aria-label="功能模块"></nav>
+    </aside>
+
+    <main class="page">
     <header class="page-header">
       <div class="page-title">
         <h1>Lighten012 Control</h1>
-        <p class="subtitle">Podman 组件 · 只读查询</p>
+        <p class="subtitle" id="subtitle">Podman 组件 · 只读查询</p>
       </div>
       <button id="refresh-btn" class="btn" type="button" title="重新拉取当前页签数据">
         <svg class="icon" viewBox="0 0 24 24" width="16" height="16" fill="none"
@@ -45,6 +51,7 @@
       </div>
     </section>
   </main>
+  </div>
 
   <script>
     (function () {
@@ -57,6 +64,8 @@
       var refreshBtn = document.getElementById('refresh-btn');
       var autoChk = document.getElementById('auto-refresh');
       var tabsEl = document.getElementById('tabs');
+      var moduleNavEl = document.getElementById('module-nav');
+      var subtitleEl = document.getElementById('subtitle');
 
       // ---------- 工具渲染 ----------
 
@@ -177,7 +186,16 @@
         }
       ];
 
+      var MODULES = [
+        {
+          label: 'Podman',
+          subtitle: 'Podman 组件 · 只读查询',
+          tabs: [0, 1, 2, 3, 4]
+        }
+      ];
+
       var current = 0;
+      var currentModule = 0;
 
       // ---------- 渲染 ----------
 
@@ -259,14 +277,43 @@
         load();
       }
 
-      TABS.forEach(function (tab, i) {
-        var btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'tab' + (i === 0 ? ' active' : '');
-        btn.textContent = tab.label;
-        btn.addEventListener('click', function () { switchTab(i); });
-        tabsEl.appendChild(btn);
-      });
+      function renderTabs() {
+        tabsEl.textContent = '';
+        MODULES[currentModule].tabs.forEach(function (tabIndex, i) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'tab' + (i === 0 ? ' active' : '');
+          btn.textContent = TABS[tabIndex].label;
+          btn.addEventListener('click', function () { switchTab(tabIndex); });
+          tabsEl.appendChild(btn);
+        });
+      }
+
+      function renderModules() {
+        MODULES.forEach(function (module, i) {
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'module-btn' + (i === currentModule ? ' active' : '');
+          btn.textContent = module.label;
+          btn.addEventListener('click', function () { switchModule(i); });
+          moduleNavEl.appendChild(btn);
+        });
+      }
+
+      function switchModule(i) {
+        if (i === currentModule) return;
+        currentModule = i;
+        current = MODULES[currentModule].tabs[0];
+        subtitleEl.textContent = MODULES[currentModule].subtitle;
+        Array.prototype.forEach.call(moduleNavEl.children, function (el, idx) {
+          el.classList.toggle('active', idx === i);
+        });
+        renderTabs();
+        load();
+      }
+
+      renderModules();
+      renderTabs();
 
       var timer = null;
       function setAutoRefresh(on) {
