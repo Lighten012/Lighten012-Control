@@ -17,8 +17,7 @@ HTTP API 层   internal/httpapi   路由组装、统一 JSON 响应、静态页�
 ## 目录结构
 
 ```
-cmd/server/main.go            程序入口：配置 → 执行器 → 注册模块 → 启动 HTTP
-internal/config/config.go     配置加载（环境变量 + 命令行参数）
+cmd/server/main.go            程序入口：执行器 → 注册模块 → 启动 HTTP
 internal/runner/runner.go     通用命令执行器（exec 直调，不经 shell）
 internal/modules/module.go    Module 接口 + 注册表
 internal/modules/podman/      Podman 组件模块（容器/镜像/网络/存储卷/信息 只读查询）
@@ -36,15 +35,8 @@ web/                          极简实验页面（后续整体替换）
 ```bash
 make run          # 等价于 go run ./cmd/server
 # 或
-make build && ./bin/lighten012-control -addr :8080
+make build && ./bin/lighten012-control
 ```
-
-配置项（命令行参数优先于环境变量）：
-
-| 参数 | 环境变量 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `-addr` | `LIGHTEN_ADDR` | `:8080` | HTTP 监听地址 |
-| `-cmd-timeout-ms` | `LIGHTEN_CMD_TIMEOUT_MS` | `10000` | 模块命令执行超时（毫秒） |
 
 ## API
 
