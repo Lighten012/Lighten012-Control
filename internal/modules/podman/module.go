@@ -5,25 +5,18 @@ import (
 	"net/http"
 
 	"github.com/lighten012/control/internal/httpapi"
-	"github.com/lighten012/control/internal/modules"
 	"github.com/lighten012/control/internal/runner"
 )
 
-// Module 实现 modules.Module 接口的 Podman 组件模块。
+// Module 是 Podman 功能模块。
 type Module struct {
 	svc *Service
 }
-
-// 编译期接口断言。
-var _ modules.Module = (*Module)(nil)
 
 // NewModule 创建 Podman 组件模块。
 func NewModule(r *runner.Executor) *Module {
 	return &Module{svc: NewService(r)}
 }
-
-// Name 模块名称。
-func (m *Module) Name() string { return "podman" }
 
 // RegisterRoutes 注册 Podman 组件的只读查询路由。
 func (m *Module) RegisterRoutes(mux *http.ServeMux) {
@@ -34,9 +27,9 @@ func (m *Module) RegisterRoutes(mux *http.ServeMux) {
 	registerGet(mux, m.route("info"), m.svc.Info)
 }
 
-// route 拼出本模块某资源的完整 API 路径。
+// route 拼出 Podman 资源的完整 API 路径。
 func (m *Module) route(resource string) string {
-	return modules.PathPrefix + "/" + m.Name() + "/" + resource
+	return httpapi.PathPrefix + "/podman/" + resource
 }
 
 // registerGet 注册一个只读查询路由：执行查询并把结果按统一 JSON 格式写出。

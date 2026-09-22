@@ -7,8 +7,8 @@ iptables 等其他模块。
 ## 架构分层
 
 ```
-HTTP API 层   internal/httpapi   路由组装、统一 JSON 响应、静态页托管、访问日志
-模块层        internal/modules   Module 接口 + 注册表；每个 Linux 功能模块一个子包
+HTTP API 层   internal/httpapi           统一 JSON 响应、API 兜底、静态页托管、访问日志
+功能层        internal/modules/podman    具体 Linux 功能模块，自行注册 API 路由
 基础设施层    internal/runner    通用命令执行器（不经 shell、超时控制），所有模块复用
 ```
 
@@ -17,9 +17,8 @@ HTTP API 层   internal/httpapi   路由组装、统一 JSON 响应、静态页�
 ## 目录结构
 
 ```
-cmd/server/main.go            程序入口：执行器 → 注册模块 → 启动 HTTP
+cmd/server/main.go            程序入口：执行器 → 功能路由 → 启动 HTTP
 internal/runner/runner.go     通用命令执行器（exec 直调，不经 shell）
-internal/modules/module.go    Module 接口 + 注册表
 internal/modules/podman/      Podman 组件模块（容器/镜像/网络/存储卷/信息 只读查询）
 internal/httpapi/             统一响应、路由组装、访问日志
 web/                          极简实验页面（后续整体替换）
@@ -81,11 +80,10 @@ make build && ./bin/lighten012-control
 1. 新建 `internal/modules/iptables/`，实现业务 `Service`：通过
    `runner.Run(ctx, "iptables", args...)` 执行命令（命令与参数在服务端
    硬编码），解析输出并定义 DTO；
-2. 实现 `modules.Module` 接口：`Name()` 返回模块名；`RegisterRoutes()` 注册
-   自己的 `GET/POST /lighten012-api/...` 路由（根路径用共享常量 `modules.PathPrefix`）；
-3. 在 `cmd/server/main.go` 中 `registry.Register(iptables.NewModule(executor))`。
-
-核心路由器、执行器、统一响应格式均无需改动。
+2. 实现 `RegisterRoutes(mux *http.ServeMux)`，注册自己的
+   `GET/POST /lighten012-api/...` 路由（根路径用共享常量 `httpapi.PathPrefix`）；
+3. 在 `cmd/server/main.go` 中创建实例，并在 `httpapi.New(...)` 的路由挂载
+   闭包里调用 `iptables.RegisterRoutes(mux)`。
 
 ## 安全说明（家庭可信内网）
 

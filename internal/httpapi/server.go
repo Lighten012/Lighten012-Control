@@ -4,21 +4,18 @@ import (
 	"log"
 	"net/http"
 	"time"
-
-	"github.com/lighten012/control/internal/modules"
 )
 
-// New 组装根 HTTP 处理器：依次挂载各模块的 API 路由，
+// PathPrefix 是所有功能 API 的统一根路径。
+const PathPrefix = "/lighten012-api"
+
+// New 组装根 HTTP 处理器：先由入口代码挂载具体功能路由，
 // 未匹配的 API 路径统一返回 JSON 404，其余路径由静态页托管。
-func New(reg *modules.Registry, static http.FileSystem) http.Handler {
+func New(static http.FileSystem, registerRoutes func(mux *http.ServeMux)) http.Handler {
 	mux := http.NewServeMux()
+	registerRoutes(mux)
 
-	for _, m := range reg.Modules() {
-		m.RegisterRoutes(mux)
-		log.Printf("[server] 已注册模块: %s", m.Name())
-	}
-
-	mux.HandleFunc(modules.PathPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(PathPrefix+"/", func(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusNotFound, "接口不存在")
 	})
 

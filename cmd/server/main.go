@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/lighten012/control/internal/httpapi"
-	"github.com/lighten012/control/internal/modules"
 	"github.com/lighten012/control/internal/modules/podman"
 	"github.com/lighten012/control/internal/runner"
 	"github.com/lighten012/control/web"
@@ -27,14 +26,11 @@ func main() {
 
 	executor := runner.New(cmdTimeout)
 
-	// 注册功能模块：新增模块（如 iptables）时只需实现 modules.Module 并在此注册，
-	// 路由组装、命令执行器、响应格式等核心代码无需改动。
-	registry := modules.NewRegistry()
-	registry.Register(podman.NewModule(executor))
+	podmanModule := podman.NewModule(executor)
 
 	server := &http.Server{
 		Addr:              listenAddr,
-		Handler:           httpapi.New(registry, web.HTTP()),
+		Handler:           httpapi.New(web.HTTP(), podmanModule.RegisterRoutes),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
